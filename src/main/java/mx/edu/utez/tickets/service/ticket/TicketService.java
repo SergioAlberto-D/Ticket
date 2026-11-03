@@ -1,92 +1,131 @@
-package mx.edu.utez.tickets.service.persona;
+package mx.edu.utez.tickets.service.ticket;
 
+import jakarta.transaction.Transactional;
+import mx.edu.utez.tickets.controller.ticket.dto.CreateTicketRequest;
+import mx.edu.utez.tickets.controller.ticket.dto.ReasignacionRequest;
+import mx.edu.utez.tickets.controller.ticket.dto.ResponseTicket;
+import mx.edu.utez.tickets.exception.custom.CustomBadRequestException;
+import mx.edu.utez.tickets.model.enums.TicketEstado;
+import mx.edu.utez.tickets.model.persona.Persona;
+import mx.edu.utez.tickets.model.ticket.Ticket;
 import mx.edu.utez.tickets.repository.persona.PersonaRepository;
 import mx.edu.utez.tickets.repository.ticket.TicketRepository;
 import org.springframework.stereotype.Service;
 
-@Service
-public class PersonaService {
-    private final TicketRepository ticketRepository;
-    private final PersonaRepository usuarioRepository;
+import java.util.ArrayList;
+import java.util.List;
 
-    public TicketService(TicketRepository ticketRepository, PersonaRepository usuarioRepository) {
-        this.ticketRepository = ticketRepository;
-        this.usuarioRepository = usuarioRepository;
+@Service
+public class TicketService {
+
+    private final TicketRepository repositorioT;
+    private final PersonaRepository repositorioP;
+
+    public TicketService(TicketRepository repositorioT, PersonaRepository repositorioP) {
+        this.repositorioT = repositorioT;
+        this.repositorioP = repositorioP;
     }
 
-    // 1. crearTicket (25 pts)
     @Transactional
-    public TicketResponseDTO crearTicket(CrearTicketDTO dto) {
-        Usuario usuario = usuarioRepository.findById(dto.getTicketServiceUsuarioId())
-                .orElseThrow(() -> new ResourceNotFoundException("El usuario con ID " + dto.getUsuarioId() + " no existe"));
+    public ResponseTicket crearTicket(CreateTicketRequest payload) {
+        Persona usuario = repositorioP.findById(payload.getUsuarioId())
+                .orElseThrow(() -> new CustomBadRequestException("El usuario con ID " + payload.getUsuarioId() + " no existe"));
 
         if (!Boolean.TRUE.equals(usuario.getActivo())) {
-            throw new BusinessRuleException("No se puede crear el ticket: el usuario está inactivo");
+            throw new CustomBadRequestException("No se puede crear el ticket: el usuario está inactivo");
         }
 
-        Ticket ticket = Ticket.builder()
-                .descripcion(dto.getDescripcion().trim())
-                .prioridad(dto.getPrioridad())
-                .estado(EstadoTicket.ABIERTO)
-                .usuario(usuario)
-                .build();
+        Ticket ticket = new Ticket();
+        ticket.setDescription(payload.getDescripcion());
+        ticket.setPrioridad(payload.getPrioridad());
+        ticket.setEstado(TicketEstado.ABIERTO);
+        ticket.setUsuario(usuario);
 
-        return toDto(ticketRepository.save(ticket));
+        Ticket guardado = repositorioT.save(ticket);
+
+        ResponseTicket response = new ResponseTicket();
+        response.setId(guardado.getId() != null ? guardado.getId().longValue() : null);
+        response.setDescripcion(guardado.getDescription());
+        response.setEstado(guardado.getEstado());
+        response.setPrioridad(guardado.getPrioridad());
+        response.setUsuarioId(guardado.getUsuario().getId());
+        response.setUsuarioNombre(guardado.getUsuario().getNombre());
+
+        return response;
     }
 
-    // 2. actualizarEstadoTicket (25 pts)
     @Transactional
-    public TicketResponseDTO actualizarEstadoTicket(Long id) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("El ticket con ID " + id + " no existe"));
+    public ResponseTicket actualizarEstadoTicket(Integer id) {
+        Ticket ticket = repositorioT.findById(id)
+                .orElseThrow(() -> new CustomBadRequestException("El ticket con ID " + id + " no existe"));
 
-        if (ticket.getEstado() == EstadoTicket.CERRADO) {
-            throw new BusinessRuleException("El ticket ya está CERRADO y no se puede modificar");
+        if (ticket.getEstado() == TicketEstado.CERRADO) {
+            throw new CustomBadRequestException("El ticket ya está CERRADO y no se puede modificar");
         }
 
-        if (ticket.getEstado() == EstadoTicket.ABIERTO) {
-            ticket.setEstado(EstadoTicket.EN_PROCESO);
-        } else if (ticket.getEstado() == EstadoTicket.EN_PROCESO) {
-            ticket.setEstado(EstadoTicket.CERRADO);
+        if (ticket.getEstado() == TicketEstado.ABIERTO) {
+            ticket.setEstado(TicketEstado.EN_PROCESO);
+        } else if (ticket.getEstado() == TicketEstado.EN_PROCESO) {
+            ticket.setEstado(TicketEstado.CERRADO);
         }
 
-        return toDto(ticketRepository.save(ticket));
+        Ticket guardado = repositorioT.save(ticket);
+
+        ResponseTicket response = new ResponseTicket();
+        response.setId(guardado.getId() != null ? guardado.getId().longValue() : null);
+        response.setDescripcion(guardado.getDescription());
+        response.setEstado(guardado.getEstado());
+        response.setPrioridad(guardado.getPrioridad());
+        response.setUsuarioId(guardado.getUsuario().getId());
+        response.setUsuarioNombre(guardado.getUsuario().getNombre());
+
+        return response;
     }
 
-    // 3. reasignarPrioridad (20 pts)
     @Transactional
-    public TicketResponseDTO reasignarPrioridad(Long id, ActualizarPrioridadDTO dto) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("El ticket con ID " + id + " no existe"));
+    public ResponseTicket reasignarPrioridad(Integer id, ReasignacionRequest dto) {
+        Ticket ticket = repositorioT.findById(id)
+                .orElseThrow(() -> new CustomBadRequestException("El ticket con ID " + id + " no existe"));
 
-        if (ticket.getEstado() == EstadoTicket.CERRADO) {
-            throw new BusinessRuleException("No se puede modificar la prioridad: el ticket se encuentra CERRADO");
+        if (ticket.getEstado() == TicketEstado.CERRADO) {
+            throw new CustomBadRequestException("No se puede modificar la prioridad: el ticket se encuentra CERRADO");
         }
 
         ticket.setPrioridad(dto.getPrioridad());
-        return toDto(ticketRepository.save(ticket));
+        Ticket guardado = repositorioT.save(ticket);
+
+        ResponseTicket response = new ResponseTicket();
+        response.setId(guardado.getId() != null ? guardado.getId().longValue() : null);
+        response.setDescripcion(guardado.getDescription());
+        response.setEstado(guardado.getEstado());
+        response.setPrioridad(guardado.getPrioridad());
+        response.setUsuarioId(guardado.getUsuario().getId());
+        response.setUsuarioNombre(guardado.getUsuario().getNombre());
+
+        return response;
     }
 
-    // 5. obtenerTicketsUsuario (10 pts)
-    @Transactional(readOnly = true)
-    public List<TicketResponseDTO> obtenerTicketsUsuario(Long usuarioId) {
-        if (!usuarioRepository.existsById(usuarioId)) {
-            throw new ResourceNotFoundException("El usuario con ID " + usuarioId + " no existe");
+
+    @Transactional
+    public List<ResponseTicket> obtenerTicketsUsuario(Long usuarioId) {
+        if (!repositorioP.existsById(usuarioId)) {
+            throw new CustomBadRequestException("El usuario con ID " + usuarioId + " no existe");
         }
 
-        return ticketRepository.findByUsuarioId(usuarioId).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
+        List<Ticket> tickets = repositorioT.findByUsuarioId(usuarioId);
+        List<ResponseTicket> listaResponse = new ArrayList<>();
 
-    private TicketResponseDTO toDto(Ticket ticket) {
-        return TicketResponseDTO.builder()
-                .id(ticket.getId())
-                .descripcion(ticket.getDescripcion())
-                .estado(ticket.getEstado())
-                .prioridad(ticket.getPrioridad())
-                .usuarioId(ticket.getUsuario().getId())
-                .usuarioNombre(ticket.getUsuario().getNombre())
-                .build();
+        for (Ticket ticket : tickets) {
+            ResponseTicket response = new ResponseTicket();
+            response.setId(ticket.getId() != null ? ticket.getId().longValue() : null);
+            response.setDescripcion(ticket.getDescription());
+            response.setEstado(ticket.getEstado());
+            response.setPrioridad(ticket.getPrioridad());
+            response.setUsuarioId(ticket.getUsuario().getId());
+            response.setUsuarioNombre(ticket.getUsuario().getNombre());
+            listaResponse.add(response);
+        }
+
+        return listaResponse;
     }
 }
